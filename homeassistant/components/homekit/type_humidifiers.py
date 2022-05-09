@@ -32,11 +32,16 @@ from .const import (
     CHAR_CURRENT_HUMIDITY,
     CHAR_DEHUMIDIFIER_THRESHOLD_HUMIDITY,
     CHAR_HUMIDIFIER_THRESHOLD_HUMIDITY,
+    CHAR_LOCK_PHYSICAL_CONTROLS,
+    CHAR_ROTATION_SPEED,
+    CHAR_SWING_MODE,
     CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER,
     CONF_LINKED_HUMIDITY_SENSOR,
+    PROP_LOCK_PHYSICAL_VALID_VALUES,
     PROP_MAX_VALUE,
     PROP_MIN_STEP,
     PROP_MIN_VALUE,
+    PROP_SWING_MODE_VALID_VALUES,
     SERV_HUMIDIFIER_DEHUMIDIFIER,
 )
 
@@ -74,7 +79,12 @@ class HumidifierDehumidifier(HomeAccessory):
         """Initialize a HumidifierDehumidifier accessory object."""
         super().__init__(*args, category=CATEGORY_HUMIDIFIER)
         self.chars = []
+
+        print("self.hass.states::::")
+        print(self.hass.states.__dict__)
+
         state = self.hass.states.get(self.entity_id)
+
         device_class = state.attributes.get(ATTR_DEVICE_CLASS, DEVICE_CLASS_HUMIDIFIER)
         self._hk_device_class = HC_HASS_TO_HOMEKIT_DEVICE_CLASS[device_class]
 
@@ -83,6 +93,25 @@ class HumidifierDehumidifier(HomeAccessory):
         ]
         self.chars.append(self._target_humidity_char_name)
 
+        if device_class == DEVICE_CLASS_DEHUMIDIFIER:
+            print("add chars")
+            # self.char_rotationspeed = serv_dehumidifier.configure_char(
+            #         "RotationSpeed",
+            #         properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
+            # )
+
+            self.chars.append(CHAR_SWING_MODE)
+            print(f"add {CHAR_SWING_MODE}")
+
+            self.chars.append(CHAR_ROTATION_SPEED)
+            print(f"add {CHAR_ROTATION_SPEED}")
+
+            self.chars.append(CHAR_LOCK_PHYSICAL_CONTROLS)
+            print(f"add {CHAR_LOCK_PHYSICAL_CONTROLS}")
+
+            print("add chars end")
+
+        print(self.chars)
         serv_humidifier_dehumidifier = self.add_preload_service(
             SERV_HUMIDIFIER_DEHUMIDIFIER, self.chars
         )
@@ -93,17 +122,22 @@ class HumidifierDehumidifier(HomeAccessory):
                 CHAR_CURRENT_HUMIDIFIER_DEHUMIDIFIER, value=0
             )
         )
-        self.char_target_humidifier_dehumidifier = (
-            serv_humidifier_dehumidifier.configure_char(
+
+        if device_class == DEVICE_CLASS_DEHUMIDIFIER:
+            valid_values = {'Dehumidifier': 2}
+        else:
+            valid_values = {
+                'Dehumidifier': 2,
+                'Humidifier': 1, 'HumidifierorDehumidifier': 0
+            }
+
+        # self.char_target_humidifier_dehumidifier = (
+        self.char_target_humidifier_dehumidifier = serv_humidifier_dehumidifier.configure_char(
                 CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER,
                 value=self._hk_device_class,
-                valid_values={
-                    HC_HASS_TO_HOMEKIT_DEVICE_CLASS_NAME[
-                        device_class
-                    ]: self._hk_device_class
-                },
-            )
+                valid_values=valid_values,
         )
+        # )
 
         # Current and target humidity characteristics
         self.char_current_humidity = serv_humidifier_dehumidifier.configure_char(
@@ -133,9 +167,48 @@ class HumidifierDehumidifier(HomeAccessory):
             CHAR_ACTIVE, value=False
         )
 
+        if device_class == DEVICE_CLASS_DEHUMIDIFIER:
+            self.char_rotationspeed = serv_humidifier_dehumidifier.configure_char(
+                    CHAR_ROTATION_SPEED,
+                    properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
+            )
+
+            self.char_rotationspeed = serv_humidifier_dehumidifier.configure_char(
+                    CHAR_SWING_MODE,
+                    valid_values=PROP_SWING_MODE_VALID_VALUES
+            )
+
+            self.char_lockphysicalcontrols = serv_humidifier_dehumidifier.configure_char(
+                    CHAR_LOCK_PHYSICAL_CONTROLS,
+                    valid_values=PROP_LOCK_PHYSICAL_VALID_VALUES
+            )
+
+            #     serv_dehumidifier.configure_char(
+            #
+            #         "RotationSpeed",
+            #         properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
+            # )
+
         self.async_update_state(state)
 
         serv_humidifier_dehumidifier.setter_callback = self._set_chars
+
+        print("self.config:::::")
+        print(self.config)
+        """
+        {
+            'manufacturer': 'Panasonic',
+            'model': 'FYTW-05760121',
+            'platform': 'taiseia_serial',
+            'linked_humidity_sensor': 'sensor.taiseia_serial_totalwatt'
+        }
+        {
+            'manufacturer': 'Panasonic',
+            'model': 'FYTW-05760121',
+            'platform': 'taiseia_serial',
+            'linked_humidity_sensor': 'sensor.taiseia_serial_humidity'
+        }
+        """
 
         self.linked_humidity_sensor = self.config.get(CONF_LINKED_HUMIDITY_SENSOR)
         if self.linked_humidity_sensor:
@@ -194,9 +267,21 @@ class HumidifierDehumidifier(HomeAccessory):
 
     def _set_chars(self, char_values):
         _LOGGER.debug("HumidifierDehumidifier _set_chars: %s", char_values)
-
+        print("char_values:::::")
+        """
+        {'Active': 0}
+        {'Active': 1, 'TargetHumidifierDehumidifierState': 2}
+        {'SwingMode': 1}
+        {'RotationSpeed': 78}
+        {'RotationSpeed': 57, 'Active': 1}
+        """
+        print(char_values)
         if CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER in char_values:
             hk_value = char_values[CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER]
+            print("self._hk_device_class::::::")
+            print(self._hk_device_class)
+            print("hk_value:::::")
+            print(hk_value)
             if self._hk_device_class != hk_value:
                 _LOGGER.error(
                     "%s is not supported", CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER
@@ -219,6 +304,23 @@ class HumidifierDehumidifier(HomeAccessory):
                 f"{self._target_humidity_char_name} to "
                 f"{char_values[self._target_humidity_char_name]}{PERCENTAGE}",
             )
+
+        if CHAR_SWING_MODE in char_values:
+            print(f"do {CHAR_SWING_MODE}")
+
+            print(f"do {CHAR_SWING_MODE} end")
+
+        if CHAR_ROTATION_SPEED in char_values:
+            print(f"do {CHAR_ROTATION_SPEED}")
+            self.async_call_service(
+                    DOMAIN,
+                    SERVICE_TURN_ON if char_values[CHAR_ACTIVE] else SERVICE_TURN_OFF,
+                    {ATTR_ENTITY_ID: self.entity_id},
+                    f"{CHAR_ACTIVE} to {char_values[CHAR_ACTIVE]}",
+            )
+
+        if CHAR_LOCK_PHYSICAL_CONTROLS in char_values:
+            print(f"do {CHAR_LOCK_PHYSICAL_CONTROLS}")
 
     @callback
     def async_update_state(self, new_state):
