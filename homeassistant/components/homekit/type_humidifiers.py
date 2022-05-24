@@ -42,7 +42,7 @@ from .const import (
     PROP_MIN_STEP,
     PROP_MIN_VALUE,
     PROP_SWING_MODE_VALID_VALUES,
-    SERV_HUMIDIFIER_DEHUMIDIFIER,
+    SERV_HUMIDIFIER_DEHUMIDIFIER
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,38 +80,42 @@ class HumidifierDehumidifier(HomeAccessory):
         super().__init__(*args, category=CATEGORY_HUMIDIFIER)
         self.chars = []
 
-        print("self.hass.states::::")
-        print(self.hass.states.__dict__)
+        print("self.hass.keys::::", self.hass.__dict__.keys())
+
+        print("self.hass.states::::", self.hass.states.__dict__)
+        print(self.hass.states)
 
         state = self.hass.states.get(self.entity_id)
 
         device_class = state.attributes.get(ATTR_DEVICE_CLASS, DEVICE_CLASS_HUMIDIFIER)
+        print("device_class::: ", device_class)
         self._hk_device_class = HC_HASS_TO_HOMEKIT_DEVICE_CLASS[device_class]
-
+        print("self._hk_device_class::::", self._hk_device_class)
         self._target_humidity_char_name = HC_DEVICE_CLASS_TO_TARGET_CHAR[
             self._hk_device_class
         ]
+        print("_target_humidity_char_name:::::", self._target_humidity_char_name)
         self.chars.append(self._target_humidity_char_name)
 
         if device_class == DEVICE_CLASS_DEHUMIDIFIER:
             print("add chars")
-            # self.char_rotationspeed = serv_dehumidifier.configure_char(
-            #         "RotationSpeed",
-            #         properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
-            # )
 
-            self.chars.append(CHAR_SWING_MODE)
-            print(f"add {CHAR_SWING_MODE}")
+            self.chars.append(CHAR_HUMIDIFIER_THRESHOLD_HUMIDITY)
+            print(f"add {CHAR_HUMIDIFIER_THRESHOLD_HUMIDITY}")
 
-            self.chars.append(CHAR_ROTATION_SPEED)
-            print(f"add {CHAR_ROTATION_SPEED}")
+            # self.chars.append(CHAR_ROTATION_SPEED)
+            # print(f"add {CHAR_ROTATION_SPEED}")
 
-            self.chars.append(CHAR_LOCK_PHYSICAL_CONTROLS)
-            print(f"add {CHAR_LOCK_PHYSICAL_CONTROLS}")
+            # self.chars.append(CHAR_SWING_MODE)
+            # print(f"add {CHAR_SWING_MODE}")
+
+            # self.chars.append(CHAR_LOCK_PHYSICAL_CONTROLS)
+            # print(f"add {CHAR_LOCK_PHYSICAL_CONTROLS}")
 
             print("add chars end")
 
-        print(self.chars)
+        print("self.chars::::", self.chars)
+
         serv_humidifier_dehumidifier = self.add_preload_service(
             SERV_HUMIDIFIER_DEHUMIDIFIER, self.chars
         )
@@ -119,25 +123,35 @@ class HumidifierDehumidifier(HomeAccessory):
         # Current and target mode characteristics
         self.char_current_humidifier_dehumidifier = (
             serv_humidifier_dehumidifier.configure_char(
-                CHAR_CURRENT_HUMIDIFIER_DEHUMIDIFIER, value=0
+                    CHAR_CURRENT_HUMIDIFIER_DEHUMIDIFIER, value=0, valid_values={
+                        "Dehumidifying": 3,
+                        "Humidifying": 2,
+                        "Idle": 1,
+                        "Inactive": 0
+                    }
             )
         )
 
         if device_class == DEVICE_CLASS_DEHUMIDIFIER:
-            valid_values = {'Dehumidifier': 2}
-        else:
-            valid_values = {
+            # char_valid_values = {'Dehumidifier': 2}
+            char_valid_values = {
                 'Dehumidifier': 2,
-                'Humidifier': 1, 'HumidifierorDehumidifier': 0
+                'Humidifier': 1,
+                'HumidifierorDehumidifier': 0
+            }
+        else:
+            char_valid_values = {
+                'Dehumidifier': 2,
+                'Humidifier': 1,
+                'HumidifierorDehumidifier': 0
             }
 
-        # self.char_target_humidifier_dehumidifier = (
-        self.char_target_humidifier_dehumidifier = serv_humidifier_dehumidifier.configure_char(
+        print("char_valid_values::::", char_valid_values)
+        self.char_target_humidifier_dehumidifier = (serv_humidifier_dehumidifier.configure_char(
                 CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER,
                 value=self._hk_device_class,
-                valid_values=valid_values,
-        )
-        # )
+                valid_values=char_valid_values
+        ))
 
         # Current and target humidity characteristics
         self.char_current_humidity = serv_humidifier_dehumidifier.configure_char(
@@ -152,14 +166,18 @@ class HumidifierDehumidifier(HomeAccessory):
         min_humidity = round(min_humidity)
         min_humidity = max(min_humidity, 0)
 
+        char_property = {
+            PROP_MIN_VALUE: min_humidity,
+            PROP_MAX_VALUE: max_humidity,
+            PROP_MIN_STEP: 1,
+            "unit": "percentage"
+        }
+        print("char_property::::::::", char_property)
+
         self.char_target_humidity = serv_humidifier_dehumidifier.configure_char(
             self._target_humidity_char_name,
             value=45,
-            properties={
-                PROP_MIN_VALUE: min_humidity,
-                PROP_MAX_VALUE: max_humidity,
-                PROP_MIN_STEP: 1,
-            },
+            properties=char_property
         )
 
         # Active/inactive characteristics
@@ -168,26 +186,29 @@ class HumidifierDehumidifier(HomeAccessory):
         )
 
         if device_class == DEVICE_CLASS_DEHUMIDIFIER:
-            self.char_rotationspeed = serv_humidifier_dehumidifier.configure_char(
-                    CHAR_ROTATION_SPEED,
-                    properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
-            )
+            if CHAR_HUMIDIFIER_THRESHOLD_HUMIDITY in self.chars:
+                self.char_humidifier_threshold_humidity = serv_humidifier_dehumidifier.configure_char(
+                        CHAR_HUMIDIFIER_THRESHOLD_HUMIDITY,
+                        properties=char_property
+                )
 
-            self.char_rotationspeed = serv_humidifier_dehumidifier.configure_char(
-                    CHAR_SWING_MODE,
-                    valid_values=PROP_SWING_MODE_VALID_VALUES
-            )
+            if CHAR_ROTATION_SPEED in self.chars:
+                self.char_rotationspeed = serv_humidifier_dehumidifier.configure_char(
+                        CHAR_ROTATION_SPEED,
+                        properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
+                )
 
-            self.char_lockphysicalcontrols = serv_humidifier_dehumidifier.configure_char(
-                    CHAR_LOCK_PHYSICAL_CONTROLS,
-                    valid_values=PROP_LOCK_PHYSICAL_VALID_VALUES
-            )
+            if CHAR_SWING_MODE in self.chars:
+                self.char_swing_mode = serv_humidifier_dehumidifier.configure_char(
+                        CHAR_SWING_MODE,
+                        valid_values=PROP_SWING_MODE_VALID_VALUES
+                )
 
-            #     serv_dehumidifier.configure_char(
-            #
-            #         "RotationSpeed",
-            #         properties={"minValue": 0.0, "maxValue": 100.0, "minStep": 33.3}
-            # )
+            if CHAR_LOCK_PHYSICAL_CONTROLS in self.chars:
+                self.char_lockphysicalcontrols = serv_humidifier_dehumidifier.configure_char(
+                        CHAR_LOCK_PHYSICAL_CONTROLS,
+                        valid_values=PROP_LOCK_PHYSICAL_VALID_VALUES
+                )
 
         self.async_update_state(state)
 
@@ -267,7 +288,7 @@ class HumidifierDehumidifier(HomeAccessory):
 
     def _set_chars(self, char_values):
         _LOGGER.debug("HumidifierDehumidifier _set_chars: %s", char_values)
-        print("char_values:::::")
+        print("char_values:::::", char_values)
         """
         {'Active': 0}
         {'Active': 1, 'TargetHumidifierDehumidifierState': 2}
@@ -275,26 +296,6 @@ class HumidifierDehumidifier(HomeAccessory):
         {'RotationSpeed': 78}
         {'RotationSpeed': 57, 'Active': 1}
         """
-        print(char_values)
-        if CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER in char_values:
-            hk_value = char_values[CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER]
-            print("self._hk_device_class::::::")
-            print(self._hk_device_class)
-            print("hk_value:::::")
-            print(hk_value)
-            if self._hk_device_class != hk_value:
-                _LOGGER.error(
-                    "%s is not supported", CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER
-                )
-
-        if CHAR_ACTIVE in char_values:
-            self.async_call_service(
-                DOMAIN,
-                SERVICE_TURN_ON if char_values[CHAR_ACTIVE] else SERVICE_TURN_OFF,
-                {ATTR_ENTITY_ID: self.entity_id},
-                f"{CHAR_ACTIVE} to {char_values[CHAR_ACTIVE]}",
-            )
-
         if self._target_humidity_char_name in char_values:
             humidity = round(char_values[self._target_humidity_char_name])
             self.async_call_service(
@@ -305,9 +306,30 @@ class HumidifierDehumidifier(HomeAccessory):
                 f"{char_values[self._target_humidity_char_name]}{PERCENTAGE}",
             )
 
+        if CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER in char_values:
+            hk_value = char_values[CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER]
+            print("self._hk_device_class::::::", self._hk_device_class)
+            print("hk_value:::::", hk_value)
+            if hk_value not in [HC_DEHUMIDIFIER, HC_HUMIDIFIER]:
+                _LOGGER.error(
+                        "%s is not supported: %s", CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER, hk_value
+                )
+            # if self._hk_device_class != hk_value:
+            #     _LOGGER.error(
+            #         "%s is not supported", CHAR_TARGET_HUMIDIFIER_DEHUMIDIFIER
+            #     )
+
+        if CHAR_ACTIVE in char_values:
+            self.async_call_service(
+                DOMAIN,
+                SERVICE_TURN_ON if char_values[CHAR_ACTIVE] else SERVICE_TURN_OFF,
+                {ATTR_ENTITY_ID: self.entity_id},
+                f"{CHAR_ACTIVE} to {char_values[CHAR_ACTIVE]}",
+            )
+
         if CHAR_SWING_MODE in char_values:
             print(f"do {CHAR_SWING_MODE}")
-
+            # TODO: call custom service
             print(f"do {CHAR_SWING_MODE} end")
 
         if CHAR_ROTATION_SPEED in char_values:
@@ -318,6 +340,7 @@ class HumidifierDehumidifier(HomeAccessory):
                     {ATTR_ENTITY_ID: self.entity_id},
                     f"{CHAR_ACTIVE} to {char_values[CHAR_ACTIVE]}",
             )
+            print(f"do {CHAR_ROTATION_SPEED} end")
 
         if CHAR_LOCK_PHYSICAL_CONTROLS in char_values:
             print(f"do {CHAR_LOCK_PHYSICAL_CONTROLS}")
